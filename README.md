@@ -19,7 +19,7 @@ Aperte ```CTRL + Shift + P``` e selecione ```Live Server```. Um browser com o pr
 - ```check_ray_collision```
 - ```lambertian```
 - ```metal```
-- ```emmisive```
+- ```emissive```
 - ```dielectric``` (quando smoothness < 0.0)
 
 ### Controles
