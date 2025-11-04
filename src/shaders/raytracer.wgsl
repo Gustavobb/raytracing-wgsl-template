@@ -134,7 +134,7 @@ fn get_camera(lookfrom: vec3f, lookat: vec3f, vup: vec3f, vfov: f32, aspect_rati
   return camera;
 }
 
-fn envoriment_color(direction: vec3f, color1: vec3f, color2: vec3f) -> vec3f
+fn enviroment_color(direction: vec3f, color1: vec3f, color2: vec3f) -> vec3f
 {
   var unit_direction = normalize(direction);
   var t = 0.5 * (unit_direction.y + 1.0);
@@ -180,7 +180,7 @@ fn dielectric(normal : vec3f, r_direction: vec3f, refraction_index: f32, frontfa
   return material_behaviour(false, vec3f(0.0));
 }
 
-fn emmisive(color: vec3f, light: f32) -> material_behaviour
+fn emissive(color: vec3f, light: f32) -> material_behaviour
 {
   return material_behaviour(false, vec3f(0.0));
 }
