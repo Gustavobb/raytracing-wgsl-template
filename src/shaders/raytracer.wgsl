@@ -175,6 +175,21 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
     }
   }
 
+  for (var i = 0; i < boxesCount; i = i + 1)
+  {
+    let box_object = boxesb[i];
+    hit_box(r, box_object.center.xyz, box_object.radius.xyz, &record, min(max, closest.t));
+
+    if (record.hit_anything && record.t < closest.t)
+    {
+      record.frontface = dot(r.direction, record.normal) < 0.0;
+      record.normal = select(-record.normal, record.normal, record.frontface);
+      record.object_color = box_object.color;
+      record.object_material = box_object.material;
+      closest = record;
+    }
+  }
+
   return closest;
 }
 
@@ -228,12 +243,27 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
       break;
     }
 
+    let emission_strength = max(0.0, record.object_material.w);
+    if (emission_strength > 0.0)
+    {
+      behaviour = emmisive(record.object_color.xyz, emission_strength);
+      light += color * record.object_color.xyz * emission_strength;
+      break;
+    }
+
     let random_sphere = rng_next_vec3_in_unit_sphere(rng_state);
     let smoothness = clamp(record.object_material.x, 0.0, 1.0);
+    let specularity = clamp(record.object_material.z, 0.0, 1.0);
+    let specular_chance = smoothness * specularity;
+    var attenuation = record.object_color.xyz;
 
-    if (rng_next_float(rng_state) < smoothness)
+    if (rng_next_float(rng_state) < specular_chance)
     {
       behaviour = metal(record.normal, r_.direction, record.object_material.y, random_sphere);
+
+      let view_cosine = clamp(dot(-normalize(r_.direction), record.normal), 0.0, 1.0);
+      let fresnel = pow(1.0 - view_cosine, 5.0);
+      attenuation = mix(record.object_color.xyz, vec3f(1.0), specularity * fresnel);
     }
     else
     {
@@ -245,7 +275,7 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
       break;
     }
 
-    color *= record.object_color.xyz;
+    color *= attenuation;
     r_ = ray(record.p + record.normal * RAY_TMIN, behaviour.direction);
   }
 
