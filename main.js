@@ -437,7 +437,16 @@ function setup()
 function writeUniforms()
 {
     // uniforms
-    uniforms.frameCount++;
+    // O contador representa apenas frames consecutivos acumulados. Ao mover a
+    // camera ou alterar a cena, a acumulacao e reiniciada imediatamente.
+    if (uniforms.shouldAccumulate > 0.5)
+    {
+        uniforms.frameCount++;
+    }
+    else
+    {
+        uniforms.frameCount = 0;
+    }
     uniforms.sunColor = RGBToInt(sunColor.object.r * 255, sunColor.object.g * 255, sunColor.object.b * 255);
     uniforms.backgroundColor1 = RGBToInt(backgroundColor1.object.r * 255, backgroundColor1.object.g * 255, backgroundColor1.object.b * 255);
     uniforms.backgroundColor2 = RGBToInt(backgroundColor2.object.r * 255, backgroundColor2.object.g * 255, backgroundColor2.object.b * 255);

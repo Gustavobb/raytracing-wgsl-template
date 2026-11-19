@@ -162,17 +162,39 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
   var record = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
   var closest = record;
 
+  for (var i = 0; i < spheresCount; i = i + 1)
+  {
+    let sphere_object = spheresb[i];
+    hit_sphere(sphere_object.transform.xyz, sphere_object.transform.w, r, &record, min(max, closest.t));
+
+    if (record.hit_anything && record.t < closest.t)
+    {
+      record.object_color = sphere_object.color;
+      record.object_material = sphere_object.material;
+      closest = record;
+    }
+  }
+
   return closest;
 }
 
 fn lambertian(normal : vec3f, absorption: f32, random_sphere: vec3f, rng_state: ptr<function, u32>) -> material_behaviour
 {
-  return material_behaviour(true, vec3f(0.0));
+  var scatter_direction = normal + random_sphere;
+
+  if (dot(scatter_direction, scatter_direction) < 0.000001)
+  {
+    scatter_direction = normal;
+  }
+
+  return material_behaviour(true, normalize(scatter_direction));
 }
 
 fn metal(normal : vec3f, direction: vec3f, fuzz: f32, random_sphere: vec3f) -> material_behaviour
 {
-  return material_behaviour(false, vec3f(0.0));
+  let reflected = reflect(normalize(direction), normal);
+  let scattered = normalize(reflected + clamp(fuzz, 0.0, 1.0) * random_sphere);
+  return material_behaviour(dot(scattered, normal) > 0.0, scattered);
 }
 
 fn dielectric(normal : vec3f, r_direction: vec3f, refraction_index: f32, frontface: bool, random_sphere: vec3f, fuzz: f32, rng_state: ptr<function, u32>) -> material_behaviour
@@ -198,7 +220,33 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
 
   for (var j = 0; j < maxbounces; j = j + 1)
   {
+    let record = check_ray_collision(r_, RAY_TMAX);
 
+    if (!record.hit_anything)
+    {
+      light += color * envoriment_color(r_.direction, backgroundcolor1, backgroundcolor2);
+      break;
+    }
+
+    let random_sphere = rng_next_vec3_in_unit_sphere(rng_state);
+    let smoothness = clamp(record.object_material.x, 0.0, 1.0);
+
+    if (rng_next_float(rng_state) < smoothness)
+    {
+      behaviour = metal(record.normal, r_.direction, record.object_material.y, random_sphere);
+    }
+    else
+    {
+      behaviour = lambertian(record.normal, record.object_material.y, random_sphere, rng_state);
+    }
+
+    if (!behaviour.scatter)
+    {
+      break;
+    }
+
+    color *= record.object_color.xyz;
+    r_ = ray(record.p + record.normal * RAY_TMIN, behaviour.direction);
   }
 
   return light;
@@ -210,12 +258,12 @@ fn render(@builtin(global_invocation_id) id : vec3u)
     var rez = uniforms[1];
     var time = u32(uniforms[0]);
 
-    // init_rng (random number generator) we pass the pixel position, resolution and frame
-    var rng_state = init_rng(vec2(id.x, id.y), vec2(u32(rez)), time);
+    if (id.x >= u32(rez) || id.y >= u32(rez))
+    {
+      return;
+    }
 
-    // Get uv
-    var fragCoord = vec2f(f32(id.x), f32(id.y));
-    var uv = (fragCoord + sample_square(&rng_state)) / vec2(rez);
+    var rng_state = init_rng(vec2(id.x, id.y), vec2(u32(rez)), time);
 
     // Camera
     var lookfrom = vec3(uniforms[7], uniforms[8], uniforms[9]);
@@ -223,23 +271,32 @@ fn render(@builtin(global_invocation_id) id : vec3u)
 
     // Get camera
     var cam = get_camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0), uniforms[10], 1.0, uniforms[6], uniforms[5]);
-    var samples_per_pixel = i32(uniforms[4]);
+    var samples_per_pixel = max(1, i32(uniforms[4]));
+    var color = vec3f(0.0);
 
-    var color = vec3(rng_next_float(&rng_state), rng_next_float(&rng_state), rng_next_float(&rng_state));
+    for (var sample = 0; sample < samples_per_pixel; sample = sample + 1)
+    {
+      let frag_coord = vec2f(f32(id.x), f32(id.y));
+      let uv = (frag_coord + sample_square(&rng_state)) / vec2f(rez);
+      let camera_ray = get_ray(cam, uv, &rng_state);
+      color += trace(camera_ray, &rng_state);
+    }
 
-    // Steps:
-    // 1. Loop for each sample per pixel
-    // 2. Get ray
-    // 3. Call trace function
-    // 4. Average the color
+    color /= f32(samples_per_pixel);
+    color = max(color, vec3f(0.0));
 
     var color_out = vec4(linear_to_gamma(color), 1.0);
     var map_fb = mapfb(id.xy, rez);
     
-    // 5. Accumulate the color
     var should_accumulate = uniforms[3];
 
-    // Set the color to the framebuffer
+    if (should_accumulate > 0.5 && time > 1u)
+    {
+      let previous = rtfb[map_fb];
+      let frame = f32(time);
+      color_out = (previous * (frame - 1.0) + color_out) / frame;
+    }
+
     rtfb[map_fb] = color_out;
     fb[map_fb] = color_out;
 }
