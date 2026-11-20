@@ -164,6 +164,7 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
 
   for (var i = 0; i < spheresCount; i = i + 1)
   {
+    record = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
     let sphere_object = spheresb[i];
     hit_sphere(sphere_object.transform.xyz, sphere_object.transform.w, r, &record, min(max, closest.t));
 
@@ -175,17 +176,54 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
     }
   }
 
-  for (var i = 0; i < boxesCount; i = i + 1)
+  for (var i = 0; i < quadsCount; i = i + 1)
   {
-    let box_object = boxesb[i];
-    hit_box(r, box_object.center.xyz, box_object.radius.xyz, &record, min(max, closest.t));
+    record = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
+    let quad_object = quadsb[i];
+    hit_quad(r, quad_object.Q, quad_object.u, quad_object.v, &record, min(max, closest.t));
 
     if (record.hit_anything && record.t < closest.t)
     {
       record.frontface = dot(r.direction, record.normal) < 0.0;
       record.normal = select(-record.normal, record.normal, record.frontface);
+      record.object_color = quad_object.color;
+      record.object_material = quad_object.material;
+      closest = record;
+    }
+  }
+
+  for (var i = 0; i < boxesCount; i = i + 1)
+  {
+    record = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
+    let box_object = boxesb[i];
+    let box_rotation = quaternion_from_euler(box_object.rotation.xyz);
+    let inverse_box_rotation = q_inverse(box_rotation);
+    let local_ray = ray(
+      rotate_vector(r.origin - box_object.center.xyz, inverse_box_rotation) + box_object.center.xyz,
+      rotate_vector(r.direction, inverse_box_rotation)
+    );
+    hit_box(local_ray, box_object.center.xyz, box_object.radius.xyz, &record, min(max, closest.t));
+
+    if (record.hit_anything && record.t < closest.t)
+    {
+      let outward_normal = normalize(rotate_vector(record.normal, box_rotation));
+      record.p = ray_at(r, record.t);
+      record.frontface = dot(r.direction, outward_normal) < 0.0;
+      record.normal = select(-outward_normal, outward_normal, record.frontface);
       record.object_color = box_object.color;
       record.object_material = box_object.material;
+      closest = record;
+    }
+  }
+
+  for (var i = 0; i < meshCount; i = i + 1)
+  {
+    record = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);
+    let mesh_object = meshb[i];
+    hit_mesh(r, mesh_object, trianglesCount, &record, min(max, closest.t));
+
+    if (record.hit_anything && record.t < closest.t)
+    {
       closest = record;
     }
   }

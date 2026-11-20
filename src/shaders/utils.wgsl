@@ -39,8 +39,10 @@ fn rgb_to_int(c: vec4f) -> i32
 
 fn AABB_intersect(r: ray, boxMin: vec3f, boxMax: vec3f) -> bool
 {
-  var tMin = (boxMin - r.origin) / r.direction;
-  var tMax = (boxMax - r.origin) / r.direction;
+  let direction_sign = select(vec3f(-1.0), vec3f(1.0), r.direction >= vec3f(0.0));
+  let safe_direction = direction_sign * max(abs(r.direction), vec3f(0.00000001));
+  var tMin = (boxMin - r.origin) / safe_direction;
+  var tMax = (boxMax - r.origin) / safe_direction;
 
   var t1 = min(tMin, tMax);
   var t2 = max(tMin, tMax);

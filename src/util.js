@@ -210,21 +210,28 @@ async function readObj(file)
 
     for (let line of lines)
     {
-        let parts = line.split(" ");
-        if (parts[0] == "v")
+        let trimmedLine = line.trim();
+        if (trimmedLine.length == 0 || trimmedLine.startsWith("#"))
+        {
+            continue;
+        }
+
+        let parts = trimmedLine.split(/\s+/);
+        if (parts[0] == "v" && parts.length >= 4)
         {
             vertices.push([parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3]), 0.0]);
         }
-
-        if (parts[0] == "f")
+        else if (parts[0] == "f" && parts.length >= 4)
         {
-            let face = [];
-            for (let i = 1; i < parts.length; i++)
+            let face = parts.slice(1).map((vertex) => {
+                let index = parseInt(vertex.split("/")[0], 10);
+                return index < 0 ? vertices.length + index : index - 1;
+            });
+
+            if (face.every((index) => Number.isInteger(index) && index >= 0 && index < vertices.length))
             {
-                face.push(parseInt(parseInt(parts[i]) - 1));
+                triangles.push(face);
             }
-            
-            triangles.push(face);
         }
     }
 
@@ -238,18 +245,14 @@ async function loadMesh(file)
 
     for (let i = 0; i < trianglesMesh.length; i ++)
     {
-        let A = verticesMesh[trianglesMesh[i][0]];
-        let B = verticesMesh[trianglesMesh[i][1]];
-        let C = verticesMesh[trianglesMesh[i][2]];
-        triangles.push(new Triangle(A, B, C));
-    
-        if (trianglesMesh[i].length == 4)
+        let face = trianglesMesh[i];
+        for (let j = 1; j < face.length - 1; j++)
         {
-            A = verticesMesh[trianglesMesh[i][0]];
-            B = verticesMesh[trianglesMesh[i][2]];
-            C = verticesMesh[trianglesMesh[i][3]];
-    
-            triangles.push(new Triangle(A, B, C));
+            triangles.push(new Triangle(
+                verticesMesh[face[0]],
+                verticesMesh[face[j]],
+                verticesMesh[face[j + 1]]
+            ));
         }
     }
 

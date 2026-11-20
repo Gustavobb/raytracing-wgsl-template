@@ -89,7 +89,8 @@ const boxesBuffer = await getComputeBuffer(gpu, boxesBufferSize, GPUBufferUsage.
 const trianglesBufferSize = (sizes.vec4 * 3) * MAX_TRIANGLES;
 const trianglesBuffer = await getComputeBuffer(gpu, trianglesBufferSize, GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE);
 
-const meshesBufferSize = (sizes.vec4 * 7 + 3 * sizes.f32) * MAX_MESHES;
+// WGSL rounds each mesh array element up to its 16-byte alignment (128 bytes).
+const meshesBufferSize = sizes.vec4 * 8 * MAX_MESHES;
 const meshesBuffer = await getComputeBuffer(gpu, meshesBufferSize, GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE);
 
 const frameBuffers = [{ buffer: frameBuffer, type: "storage" }, { buffer: rayTraceFrameBuffer, type: "storage" }];
@@ -481,6 +482,7 @@ function writeBuffer(buffer, size, objectList)
     var variables = Object.keys(objectList[0]);
     for (let i = 0; i < objectList.length; i++)
     {
+        let objectStartOffset = offset;
         for (let j = 1; j < variables.length; j++)
         {
             let lengthOfVariable = 0;
@@ -500,6 +502,9 @@ function writeBuffer(buffer, size, objectList)
                 objectData[offset++] = objectList[i][variables[j]][k];
             }
         }
+
+        // Keep array<struct> elements aligned to WGSL's 16-byte struct stride.
+        offset = objectStartOffset + Math.ceil((offset - objectStartOffset) / 4) * 4;
     }
 
     gpu.queue.writeBuffer(buffer, 0, objectData);

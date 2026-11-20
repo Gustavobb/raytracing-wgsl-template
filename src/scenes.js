@@ -411,7 +411,7 @@ async function Bunny()
     };
 }
 
-async function Suzzanne()
+async function Suzanne()
 {
     let { verticesMesh, trianglesMesh, triangles } = await loadMesh('./media/suzanne.obj');
     let meshes = [new Mesh([0, 0.0, -6], [2, 2, 2], [0, 0, 0], [0.6, 0.3, 0.7, 1.0], [0.0, 0.0, 0.0, 0.0], 0, 0, triangles.length)];
@@ -431,6 +431,49 @@ async function Suzzanne()
         sunIntensity: 1.0,
         samplesPerPixel: 1.0,
         maxBounces: 10.0
+    };
+}
+
+async function GlassGarden()
+{
+    let spheres = [
+        new Sphere([0, -1001, 0], [0.12, 0.16, 0.3], 1000, [0.85, 0.02, 0.55, 0]),
+        new Sphere([-1.05, -0.2, -2.8], [0.28, 0.82, 1.0], 0.62, [-1.0, 0.0, 1.5, 0]),
+        new Sphere([1.05, -0.28, -3.0], [1.0, 0.42, 0.12], 0.62, [1.0, 0.02, 0.85, 0]),
+        new Sphere([0.0, 1.65, -4.0], [1.0, 0.78, 0.42], 0.22, [0.0, 0.0, 0.0, 5.0]),
+    ];
+
+    let quads = [
+        new Quad([-4, -1, -6, 0], [8, 0, 0, 0], [0, 5, 0, 0], [0.12, 0.16, 0.3, 1], [0.0, 0.0, 0.0, 0.0]),
+        new Quad([-3.2, -1, -5.95, 0], [1.25, 0, 0, 0], [0, 3.4, 0, 0], [0.08, 0.42, 0.58, 1], [0.0, 0.0, 0.0, 0.0]),
+        new Quad([1.95, -1, -5.95, 0], [1.25, 0, 0, 0], [0, 3.4, 0, 0], [0.52, 0.12, 0.34, 1], [0.0, 0.0, 0.0, 0.0]),
+        new Quad([-0.8, 2.25, -2.8, 0], [1.6, 0, 0, 0], [0, 0, -1.2, 0], [1.0, 0.78, 0.52, 1], [0.0, 0.0, 0.0, 7.0]),
+    ];
+
+    let boxes = [
+        new Box([-1.05, -0.73, -2.8], [0.08, 0.34, 0.48], [0, 0, 0, 0], [0.38, 0.27, 0.38, 0], [0.0, 0.0, 0.0, 0.0]),
+        new Box([0.0, -0.78, -3.8], [0.34, 0.24, 0.16], [0, 0.25, 0, 0], [0.42, 0.22, 0.42, 0], [0.0, 0.0, 0.0, 0.0]),
+        new Box([1.05, -0.78, -3.0], [0.08, 0.34, 0.48], [0, 0, 0, 0], [0.38, 0.22, 0.38, 0], [0.0, 0.0, 0.0, 0.0]),
+    ];
+
+    let { verticesMesh, triangles } = await loadMesh('./media/suzanne.obj');
+    let meshes = [new Mesh([0, -0.35, -3.8], [0.72, 0.72, 0.72], [0, 0.35, 0], [0.82, 0.58, 0.24, 1], [1.0, 0.03, 0.75, 0], 0, 0, triangles.length)];
+    let { min, max } = getObjBoundingBox(verticesMesh);
+    meshes[0].setBoundingBox(min, max);
+
+    return {
+        spheres,
+        quads,
+        boxes,
+        triangles,
+        meshes,
+        backgroundColor1: [0.015, 0.025, 0.08],
+        backgroundColor2: [0.12, 0.22, 0.42],
+        focusDistance: 5.0,
+        focusAngle: 0.0,
+        sunIntensity: 0.2,
+        samplesPerPixel: 2,
+        maxBounces: 10,
     };
 }
 
