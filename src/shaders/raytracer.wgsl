@@ -202,24 +202,41 @@ fn lambertian(normal : vec3f, absorption: f32, random_sphere: vec3f, rng_state: 
     scatter_direction = normal;
   }
 
-  return material_behaviour(true, normalize(scatter_direction));
+  let scatter = absorption < rng_next_float(rng_state);
+  return material_behaviour(scatter, normalize(scatter_direction));
 }
 
 fn metal(normal : vec3f, direction: vec3f, fuzz: f32, random_sphere: vec3f) -> material_behaviour
 {
-  let reflected = reflect(normalize(direction), normal);
-  let scattered = normalize(reflected + clamp(fuzz, 0.0, 1.0) * random_sphere);
-  return material_behaviour(dot(scattered, normal) > 0.0, scattered);
+  let scattered = reflect(direction, normal) + fuzz * random_sphere;
+  return material_behaviour(dot(scattered, normal) > 0.0, normalize(scattered));
 }
 
 fn dielectric(normal : vec3f, r_direction: vec3f, refraction_index: f32, frontface: bool, random_sphere: vec3f, fuzz: f32, rng_state: ptr<function, u32>) -> material_behaviour
-{  
-  return material_behaviour(false, vec3f(0.0));
+{
+  let unit_direction = normalize(r_direction);
+
+  let refraction_ratio = select(refraction_index, 1.0 / refraction_index, frontface);
+  let cos_theta = min(dot(-unit_direction, normal), 1.0);
+  let sin_theta = sqrt(max(0.0, 1.0 - cos_theta * cos_theta));
+
+  let r0_base = (1.0 - refraction_ratio) / (1.0 + refraction_ratio);
+  let r0 = r0_base * r0_base;
+  let reflectance = r0 + (1.0 - r0) * pow(1.0 - cos_theta, 5.0);
+  let cannot_refract = refraction_ratio * sin_theta > 1.0;
+
+  var direction = refract(unit_direction, normal, refraction_ratio) + random_sphere * fuzz;
+  if (cannot_refract || reflectance > rng_next_float(rng_state))
+  {
+    direction = reflect(unit_direction, normal);
+  }
+
+  return material_behaviour(true, direction);
 }
 
 fn emmisive(color: vec3f, light: f32) -> material_behaviour
 {
-  return material_behaviour(false, vec3f(0.0));
+  return material_behaviour(light < 0.01, color * light);
 }
 
 fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
@@ -235,6 +252,11 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
 
   for (var j = 0; j < maxbounces; j = j + 1)
   {
+    if (!behaviour.scatter)
+    {
+      break;
+    }
+
     let record = check_ray_collision(r_, RAY_TMAX);
 
     if (!record.hit_anything)
@@ -243,40 +265,31 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f
       break;
     }
 
-    let emission_strength = max(0.0, record.object_material.w);
-    if (emission_strength > 0.0)
-    {
-      behaviour = emmisive(record.object_color.xyz, emission_strength);
-      light += color * record.object_color.xyz * emission_strength;
-      break;
-    }
-
     let random_sphere = rng_next_vec3_in_unit_sphere(rng_state);
-    let smoothness = clamp(record.object_material.x, 0.0, 1.0);
-    let specularity = clamp(record.object_material.z, 0.0, 1.0);
-    let specular_chance = smoothness * specularity;
-    var attenuation = record.object_color.xyz;
+    let smoothness = record.object_material.x;
+    let absorption = record.object_material.y;
+    let specularity = record.object_material.z;
+    let diffuse = lambertian(record.normal, absorption, random_sphere, rng_state);
+    let metallic = metal(record.normal, r_.direction, absorption, random_sphere);
+    let emission = emmisive(record.object_color.xyz, record.object_material.w);
 
-    if (rng_next_float(rng_state) < specular_chance)
-    {
-      behaviour = metal(record.normal, r_.direction, record.object_material.y, random_sphere);
+    let specular_bounce = specularity > rng_next_float(rng_state);
+    behaviour.direction = mix(diffuse.direction, metallic.direction, smoothness * f32(specular_bounce));
+    behaviour.scatter = bool(mix(f32(diffuse.scatter), f32(metallic.scatter), smoothness)) && emission.scatter;
 
-      let view_cosine = clamp(dot(-normalize(r_.direction), record.normal), 0.0, 1.0);
-      let fresnel = pow(1.0 - view_cosine, 5.0);
-      attenuation = mix(record.object_color.xyz, vec3f(1.0), specularity * fresnel);
-    }
-    else
+    if (smoothness < 0.0)
     {
-      behaviour = lambertian(record.normal, record.object_material.y, random_sphere, rng_state);
+      behaviour = dielectric(record.normal, r_.direction, specularity, record.frontface, random_sphere, absorption, rng_state);
     }
 
-    if (!behaviour.scatter)
+    if (length(behaviour.direction) < RAY_TMIN)
     {
-      break;
+      behaviour.direction = record.normal;
     }
 
-    color *= attenuation;
-    r_ = ray(record.p + record.normal * RAY_TMIN, behaviour.direction);
+    light += emission.direction * color;
+    color *= record.object_color.xyz;
+    r_ = ray(record.p, behaviour.direction);
   }
 
   return light;
@@ -303,11 +316,11 @@ fn render(@builtin(global_invocation_id) id : vec3u)
     var cam = get_camera(lookfrom, lookat, vec3(0.0, 1.0, 0.0), uniforms[10], 1.0, uniforms[6], uniforms[5]);
     var samples_per_pixel = max(1, i32(uniforms[4]));
     var color = vec3f(0.0);
+    let frag_coord = vec2f(f32(id.x), f32(id.y));
+    let uv = (frag_coord + sample_square(&rng_state)) / vec2f(rez);
 
     for (var sample = 0; sample < samples_per_pixel; sample = sample + 1)
     {
-      let frag_coord = vec2f(f32(id.x), f32(id.y));
-      let uv = (frag_coord + sample_square(&rng_state)) / vec2f(rez);
       let camera_ray = get_ray(cam, uv, &rng_state);
       color += trace(camera_ray, &rng_state);
     }
